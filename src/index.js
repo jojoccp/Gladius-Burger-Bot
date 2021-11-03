@@ -6,6 +6,8 @@ async function start(client) {
 
     await client.onMessage(async message => {
         setUser(message.from, message.sender.pushname, 0)
+
+       
    
         setTimeout( async function () { 
             var gettingStage = await getStage(message.from)
@@ -13,16 +15,26 @@ async function start(client) {
              if(gettingStage == 0){
                 var element =  executeStage0(message.from, message.body)
                 client.sendText(message.from, element)                
-                setTimeout(() => {
-                    client.sendText(message.from, executeStage1(message.from, message.body))
-                }, 5000)
-                updateStage(1, message.from)       
+                setTimeout(async () => {
+                    updateStage(1, message.from)
+                    await client.sendButtons(message.from, "Deseja realizar o pedido?", [
+                      {
+                          id:"1",
+                          "text": "Sim ✅ "
+                      },
+                      {
+                          id: "2",
+                          text: "Não ⛔"
+                      }
+                    ],"", "")
+                }, 1000)
+                
             } if(gettingStage == 1){
                 element = executeStage1Choice(message.from, message.body)
                 
                     client.sendText(message.from, element)
 
-                    if(message.body == 2){
+                    if(message.body == 'Não ⛔'){
                         updateStage(0, message.from)
                     } else {
                         setTimeout(()=> {
@@ -34,16 +46,44 @@ async function start(client) {
             } if(gettingStage == 2){
                 element = await executeStage2Choice(message.from, message.body)
                 client.sendText(message.from, element)
+
+                if(message.body == '*'){
+                  updateDhLastOrder(message.from)
+                  await client.sendButtons(message.from, "Confirma pedido?", [
+                    {
+                        id:"1",
+                        "text": "Sim ✅ "
+                    },
+                    {
+                        id: "2",
+                        text: "Não ⛔"
+                    }
+                  ],"", "")
+                }
+                               
             } if(gettingStage == 3){
                 element = executeStage3(message.from, message.body)
+                
                 client.sendText(message.from, element)
+
             } if(gettingStage == 4){
                 element = executeStage4(message.from, message.body)
+
                 client.sendText(message.from, element)
+                await client.sendButtons(message.from, "Está correto?", [
+                  {
+                      id:"1",
+                      "text": "Sim ✅ "
+                  },
+                  {
+                      id: "2",
+                      text: "Corrigir ✏️"
+                  }
+                ],"", "")
             } if(gettingStage == 5){
-                element = executeStage5(message.from, message.body)
-                client.sendText(message.from, element)
-            } 
+              element = executeStage5(message.from, message.body)
+              client.sendText(message.from, element)
+          }  
           }, 100)          
     });
   }
@@ -95,6 +135,13 @@ async function start(client) {
 
         var response = await db.query(query)
         return response
+    }
+
+    async function updateDhLastOrder(phoneNumber) {
+      const query = `UPDATE users SET dh_last_order = CURRENT_TIMESTAMP WHERE phone_number  = '${phoneNumber}'`
+
+      var response = await db.query(query)
+      return response
     }
 /////////////////////////DATABASE\\\\\\\\\\\\\\\\\\\\\\\\\DATABASE/////////////////////////DATABASE\\\\\\\\\\\\\\\\\\\\\\\\\
 
@@ -153,12 +200,12 @@ async function start(client) {
     function executeStage1Choice(user, msg) {
         console.log('Executando Estágio 1 Choice')
         
-        if(msg == 1 ){
-            let response = "Ok, vamos ao seu pedido 😋\n"           
+        if(msg == 'Sim ✅ '){
+            let response = "Ok, vamos ao seu pedido 😋\n"  
+            updateStage(2, user)           
             return response
-        } else if(msg == 2){
-            response = "Que pena!. 🥲\nMas aguardo seu contato em breve\nA Gladius Burger agradece."
-            updateStage(0, user)
+        } if(msg == 'Não ⛔'){
+            response = "Que pena! 🥲\nAguardo seu contato em breve.\n\nA Gladius Burger agradece a preferência 🍔 🍟 🧋 "
             return response
         }
     }
@@ -191,7 +238,8 @@ async function start(client) {
 
         for (let index = 0; index < cardapio.length; index++) {
             const element = cardapio[index];
-            response += `${index+1} -> ${cardapio[index].descricao}  R$ ${cardapio[index].preco} \n`     
+            
+            response += `${index+1} - ${cardapio[index].descricao} - ${(cardapio[index].preco).toLocaleString('pt-br', {style: 'currency', currency: 'BRL'})} \n`     
         }
         response += '\n\nDigite * para finalizar o pedido.'
        
@@ -209,11 +257,8 @@ async function start(client) {
             var response = `Pedido finalizado. 📝\n\nItens adicionados ao pedido:\n`
             var order = await getOrder(phoneNumber)
             var orderValue = await getOrderValue(phoneNumber)
-
-             response += order
-             response += `\nTotal: ${orderValue} 💸`
-             response += '\n\n\nConfirma o pedido?\n1- Sim ✅ \n2- Não ⛔'
-        
+            response += order
+            response += `\nTotal: ${(parseInt(orderValue)).toLocaleString('pt-br', {style: 'currency', currency: 'BRL'})} 💸`                     
             return response
         } 
         if(!cardapio[msg-1]){
@@ -224,10 +269,10 @@ async function start(client) {
     function executeStage3(phoneNumber, msg){
         console.log('Executando Estágio 3')
         let response =''
-        if(msg == 1){
-            response = '📌 Digite seu endereço e o número da residência: '
+        if(msg == 'Sim ✅ '){
+            response = '📍 Digite seu endereço e o número da residência: '
             updateStage(4, phoneNumber)
-        } if(msg == 2) {
+        } if(msg == 'Não ⛔') {
             updateStage(2, phoneNumber)
             response = 'Ok, vamos refazer seu pedido 😅\n\n'
 
@@ -235,7 +280,7 @@ async function start(client) {
 
             for (let index = 0; index < cardapio.length; index++) {
                 const element = cardapio[index];
-                response += `${index+1} -> ${cardapio[index].descricao}  R$ ${cardapio[index].preco} \n`     
+                response += `${index+1} -> ${cardapio[index].descricao} - ${(cardapio[index].preco).toLocaleString('pt-br', {style: 'currency', currency: 'BRL'})} \n`     
             }
             response += '\n\nDigite * para finalizar o pedido.'
         }
@@ -245,7 +290,7 @@ async function start(client) {
 
     function executeStage4(phoneNumber,msg){
         console.log('Executando Estágio 4')
-        var response = 'O endereço:\n' + msg + '\n\nEstá correto?\n1- Sim ✅ \n2- Não ⛔ ... desejo corrigir'
+        var response = 'O endereço:\n' + msg + ''
         updateStage(5, phoneNumber)
         
         return response      
@@ -254,7 +299,7 @@ async function start(client) {
     function executeStage5(phoneNumber,msg){
         console.log('Executando Estágio 5')
         var response = ''
-        if(msg == 1){
+        if(msg == 'Sim ✅ '){
             restartOrder(phoneNumber)
             updateStage(0, phoneNumber)
             response = 'Agora é só aguardar 👏\n'
@@ -262,11 +307,13 @@ async function start(client) {
             response += 'A Gladius Burger agradece a preferência 🍔 🍟 🧋\n'
             response += 'Obrigado'
         return response
-        } if(msg == 2){
+        } if(msg == 'Corrigir ✏️'){
             response += 'Ok 😅\n Digite novamente seu endereço: '
             updateStage(4, phoneNumber)
 
             return response
         }
     }
+
+    
 /////////////////////////STAGES\\\\\\\\\\\\\\\\\\\\\\\\\STAGES/////////////////////////STAGES\\\\\\\\\\\\\\\\\\\\\\\\\    
